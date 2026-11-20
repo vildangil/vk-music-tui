@@ -1,1 +1,1 @@
-# vk-player-tui
+# vk-music-tui
