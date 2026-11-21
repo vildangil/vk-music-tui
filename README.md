@@ -1,4 +1,4 @@
-<p align="center"><img src="packaging/icons/vk-music-tui-256.png" width="128" alt="VK Music TUI"></p>
+<p align="center"><img src="packaging/icons/vk-music-tui-logo.png" width="320" alt="VK Music TUI"></p>
 
 # VK Music TUI — VK Музыка в терминале
 
