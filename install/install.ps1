@@ -7,7 +7,7 @@ $ProgressPreference = 'SilentlyContinue'
 $repo = 'vildangil/vk-music-tui'
 $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64' -or $env:PROCESSOR_ARCHITEW6432 -eq 'ARM64') { 'arm64' } else { 'amd64' }
 $url  = "https://github.com/$repo/releases/latest/download/vk-music-tui_windows_$arch.zip"
-$dir  = Join-Path $env:LOCALAPPDATA 'Programs\vktui'
+$dir  = Join-Path $env:LOCALAPPDATA 'Programs\vk-music-tui'
 
 Write-Host "==> Скачиваю vktui ($arch)..." -ForegroundColor Cyan
 $tmp = Join-Path $env:TEMP ("vktui-" + [guid]::NewGuid())
