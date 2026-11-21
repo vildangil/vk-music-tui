@@ -1,0 +1,66 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  # archives for every OS + Linux packages (deb, rpm, apk, pkg.tar.zst)
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Windows installers (Inno Setup): desktop shortcut, Start menu, PATH, mpv via winget
+  windows-installer:
+    needs: goreleaser
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64, "386"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - name: Build exe
+        shell: pwsh
+        env: { GOOS: windows, GOARCH: "${{ matrix.arch }}", CGO_ENABLED: "0" }
+        run: go build -trimpath -ldflags "-s -w -X main.version=$($env:GITHUB_REF_NAME.TrimStart('v'))" -o dist\vktui.exe .
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $v = $env:GITHUB_REF_NAME.TrimStart('v')
+          $icon = if (Test-Path packaging\icons\vk-music-tui.ico) { "/DIconFile=$PWD\packaging\icons\vk-music-tui.ico" } else { "/DIconFile=" }
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\iscc.exe" "/DAppVersion=$v" "/DArch=${{ matrix.arch }}" "/DSrcExe=$PWD\dist\vktui.exe" $icon "/O$PWD\dist" packaging\windows\vk-music-tui.iss
+      - name: Upload installer
+        shell: pwsh
+        env: { GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+        run: gh release upload $env:GITHUB_REF_NAME "dist\vk-music-tui-setup-${{ matrix.arch }}.exe" --clobber
+
+  # macOS installer: universal binary + "VK Music TUI.app" in a .pkg
+  macos-pkg:
+    needs: goreleaser
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - name: Build pkg
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          bash packaging/macos/build-pkg.sh "$V"
+      - name: Upload pkg
+        env: { GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+        run: gh release upload "$GITHUB_REF_NAME" dist/vk-music-tui-*.pkg --clobber

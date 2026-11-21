@@ -1,0 +1,116 @@
+version: 2
+project_name: vk-music-tui
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: vktui
+    binary: vktui
+    env: [CGO_ENABLED=0]
+    goos: [linux, windows, darwin, freebsd]
+    goarch: [amd64, arm64, arm, "386"]
+    goarm: ["7"]
+    ignore:
+      - { goos: darwin, goarch: arm }
+      - { goos: darwin, goarch: "386" }
+      - { goos: windows, goarch: arm }
+      - { goos: freebsd, goarch: arm }
+      - { goos: freebsd, goarch: "386" }
+    flags: [-trimpath]
+    ldflags: ["-s -w -X main.version={{ .Version }}"]
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    # stable names so install scripts can use /releases/latest/download/...
+    name_template: "vk-music-tui_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+    files:
+      - README.md
+      - LICENSE
+      - packaging/linux/vk-music-tui.desktop
+      - packaging/icons/vk-music-tui-256.png
+
+checksum:
+  name_template: checksums.txt
+
+nfpms:
+  - id: linux-packages
+    package_name: vk-music-tui
+    file_name_template: "vk-music-tui_{{ .Version }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+    homepage: https://github.com/vildangil/vk-music-tui
+    maintainer: vildangil
+    description: |-
+      Лёгкий консольный плеер VK Музыки в стиле Spotify.
+      Lightweight terminal VK Music player (Spotify-like TUI).
+    license: MIT
+    section: sound
+    formats: [deb, rpm, apk, archlinux]
+    dependencies: [mpv]
+    contents:
+      - src: packaging/linux/vk-music-tui.desktop
+        dst: /usr/share/applications/vk-music-tui.desktop
+      - src: LICENSE
+        dst: /usr/share/licenses/vk-music-tui/LICENSE
+      - src: packaging/icons/vk-music-tui-256.png
+        dst: /usr/share/icons/hicolor/256x256/apps/vk-music-tui.png
+      - src: packaging/icons/vk-music-tui-128.png
+        dst: /usr/share/icons/hicolor/128x128/apps/vk-music-tui.png
+      - src: packaging/icons/vk-music-tui-48.png
+        dst: /usr/share/icons/hicolor/48x48/apps/vk-music-tui.png
+      - src: packaging/icons/vk-music-tui-32.png
+        dst: /usr/share/icons/hicolor/32x32/apps/vk-music-tui.png
+    overrides:
+      rpm:
+        file_name_template: "{{ .ConventionalFileName }}"
+      archlinux:
+        file_name_template: "{{ .ConventionalFileName }}"
+      apk:
+        file_name_template: "{{ .ConventionalFileName }}"
+
+changelog:
+  sort: asc
+
+release:
+  name_template: "VK Music TUI {{ .Version }}"
+  header: |
+    Лёгкий консольный плеер VK Музыки в стиле Spotify. Команда для запуска — `vktui`.
+    Для звука нужен [mpv](https://mpv.io) — установщики и пакеты ставят его сами.
+
+    ## Скачать
+
+    {{ $u := printf "https://github.com/vildangil/vk-music-tui/releases/download/%s" .Tag }}
+    ### Windows
+    | | Файл |
+    |---|---|
+    | **Установщик (рекомендуется)**, x64 | [vk-music-tui-setup-amd64.exe]({{ $u }}/vk-music-tui-setup-amd64.exe) |
+    | Установщик, ARM64 | [vk-music-tui-setup-arm64.exe]({{ $u }}/vk-music-tui-setup-arm64.exe) |
+    | Установщик, 32-бит | [vk-music-tui-setup-386.exe]({{ $u }}/vk-music-tui-setup-386.exe) |
+    | Портативный архив | [x64]({{ $u }}/vk-music-tui_windows_amd64.zip) · [ARM64]({{ $u }}/vk-music-tui_windows_arm64.zip) · [32-бит]({{ $u }}/vk-music-tui_windows_386.zip) |
+
+    ### macOS
+    | | Файл |
+    |---|---|
+    | **Установщик (Intel и Apple Silicon)** | [vk-music-tui-{{ .Version }}.pkg]({{ $u }}/vk-music-tui-{{ .Version }}.pkg) |
+    | Архив | [Apple Silicon]({{ $u }}/vk-music-tui_darwin_arm64.tar.gz) · [Intel]({{ $u }}/vk-music-tui_darwin_amd64.tar.gz) |
+
+    Установщик не подписан: при первом открытии — правый клик → «Открыть».
+
+    ### Linux
+    | Дистрибутив | x86_64 | ARM64 | ARMv7 | x86 |
+    |---|---|---|---|---|
+    | Debian / Ubuntu / Mint (`.deb`) | [deb]({{ $u }}/vk-music-tui_{{ .Version }}_amd64.deb) | [deb]({{ $u }}/vk-music-tui_{{ .Version }}_arm64.deb) | [deb]({{ $u }}/vk-music-tui_{{ .Version }}_armv7.deb) | [deb]({{ $u }}/vk-music-tui_{{ .Version }}_386.deb) |
+    | Fedora / openSUSE (`.rpm`) | [rpm]({{ $u }}/vk-music-tui-{{ .Version }}-1.x86_64.rpm) | [rpm]({{ $u }}/vk-music-tui-{{ .Version }}-1.aarch64.rpm) | [rpm]({{ $u }}/vk-music-tui-{{ .Version }}-1.armv7hl.rpm) | [rpm]({{ $u }}/vk-music-tui-{{ .Version }}-1.i386.rpm) |
+    | Arch / Manjaro (`.pkg.tar.zst`) | [pkg]({{ $u }}/vk-music-tui-{{ .Version }}-1-x86_64.pkg.tar.zst) | [pkg]({{ $u }}/vk-music-tui-{{ .Version }}-1-aarch64.pkg.tar.zst) | [pkg]({{ $u }}/vk-music-tui-{{ .Version }}-1-armv7h.pkg.tar.zst) | [pkg]({{ $u }}/vk-music-tui-{{ .Version }}-1-i686.pkg.tar.zst) |
+    | Alpine (`.apk`) | [apk]({{ $u }}/vk-music-tui_{{ .Version }}_x86_64.apk) | [apk]({{ $u }}/vk-music-tui_{{ .Version }}_aarch64.apk) | [apk]({{ $u }}/vk-music-tui_{{ .Version }}_armv7.apk) | [apk]({{ $u }}/vk-music-tui_{{ .Version }}_x86.apk) |
+    | Любой (архив) | [tar.gz]({{ $u }}/vk-music-tui_linux_amd64.tar.gz) | [tar.gz]({{ $u }}/vk-music-tui_linux_arm64.tar.gz) | [tar.gz]({{ $u }}/vk-music-tui_linux_armv7.tar.gz) | [tar.gz]({{ $u }}/vk-music-tui_linux_386.tar.gz) |
+
+    Или одной командой: `curl -fsSL https://raw.githubusercontent.com/vildangil/vk-music-tui/main/install/install.sh | sh`
+
+    ### FreeBSD
+    [amd64]({{ $u }}/vk-music-tui_freebsd_amd64.tar.gz) · [arm64]({{ $u }}/vk-music-tui_freebsd_arm64.tar.gz)
+
+    Контрольные суммы — в `checksums.txt`.

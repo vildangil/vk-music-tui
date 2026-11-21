@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=VK Music TUI
+Name[ru]=VK Музыка (терминал)
+GenericName=Music Player
+GenericName[ru]=Музыкальный плеер
+Comment=Lightweight terminal VK Music player
+Comment[ru]=Лёгкий консольный плеер VK Музыки
+Exec=vktui
+Terminal=true
+Icon=vk-music-tui
+Categories=AudioVideo;Audio;Player;ConsoleOnly;
+Keywords=vk;music;player;vkontakte;музыка;

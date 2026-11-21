@@ -1,0 +1,7 @@
+/vktui
+/vktui.exe
+/dist/
+*.tmp
+/music/
+/offline/
+/cache/

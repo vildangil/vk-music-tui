@@ -1,0 +1,16 @@
+#!/bin/bash
+# Runs as root after the .pkg is installed: make sure mpv (the audio engine) exists.
+for p in /opt/homebrew/bin/mpv /usr/local/bin/mpv /Applications/mpv.app/Contents/MacOS/mpv; do
+  [ -x "$p" ] && exit 0
+done
+
+USER_NAME="$(stat -f%Su /dev/console)"
+for brew in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+  if [ -x "$brew" ] && [ -n "$USER_NAME" ] && [ "$USER_NAME" != "root" ]; then
+    # Homebrew refuses to run as root: install as the logged-in user
+    sudo -u "$USER_NAME" -H "$brew" install mpv >/tmp/vk-music-tui-mpv.log 2>&1 || true
+    exit 0
+  fi
+done
+# no Homebrew: the player explains how to install mpv on first start
+exit 0

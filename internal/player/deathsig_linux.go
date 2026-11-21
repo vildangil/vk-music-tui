@@ -1,0 +1,10 @@
+package player
+
+import (
+	"os/exec"
+	"syscall"
+)
+
+func setDeathSig(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGTERM}
+}
