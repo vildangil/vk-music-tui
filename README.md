@@ -2,7 +2,7 @@
 
 <h1 align="center">VK Music TUI</h1>
 
-<p align="center">Лёгкий плеер VK Музыки в терминале, в стиле Spotify-tui.<br>Windows · macOS · Linux · FreeBSD · Termux</p>
+<p align="center">Лёгкий плеер VK Музыки в терминале, в стиле Spotify-tui.<br>Windows · macOS · Linux · FreeBSD · Termux (зачем и как оно работает? я сам хз вопросы к клоду)</p>
 
 ## Установка
 
