@@ -73,12 +73,17 @@ nfpms:
 
 changelog:
   sort: asc
+  filters:
+    exclude:
+      - "^README"
+      - "^docs"
 
 release:
   name_template: "VK Music TUI {{ .Version }}"
   header: |
     Лёгкий консольный плеер VK Музыки в стиле Spotify. Команда для запуска — `vktui`.
-    Для звука нужен [mpv](https://mpv.io) — установщики и пакеты ставят его сами.
+    Для звука нужен [mpv](https://mpv.io) — установщики и пакеты ставят его сами (`vktui deps` — поставить вручную).
+    Также можно играть через VLC, FFmpeg (ffplay) или MPlayer: `vktui engines`.
 
     ## Скачать
 
@@ -97,7 +102,7 @@ release:
     | **Установщик (Intel и Apple Silicon)** | [vk-music-tui-{{ .Version }}.pkg]({{ $u }}/vk-music-tui-{{ .Version }}.pkg) |
     | Архив | [Apple Silicon]({{ $u }}/vk-music-tui_darwin_arm64.tar.gz) · [Intel]({{ $u }}/vk-music-tui_darwin_amd64.tar.gz) |
 
-    Установщик не подписан: при первом открытии — правый клик → «Открыть».
+    Установщик не подписан: при первом открытии — правый клик → «Открыть» (macOS 15+: Системные настройки → Конфиденциальность и безопасность → «Всё равно открыть»). После установки «VK Music TUI» появится в Launchpad.
 
     ### Linux
     | Дистрибутив | x86_64 | ARM64 | ARMv7 | x86 |

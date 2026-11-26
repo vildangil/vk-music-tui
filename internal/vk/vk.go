@@ -156,7 +156,9 @@ func (c *Client) Call(ctx context.Context, method string, params url.Values, out
 	}
 	params.Set("lang", "ru")
 	params.Set("https", "1")
-	if c.DeviceID != "" {
+	// The Android-style device id belongs to the official-app flow; Kate tokens
+	// were issued without it and VK may treat the mismatch as suspicious.
+	if c.DeviceID != "" && c.App.Name != Kate.Name {
 		params.Set("device_id", c.DeviceID)
 	}
 	base := c.App.APIBase

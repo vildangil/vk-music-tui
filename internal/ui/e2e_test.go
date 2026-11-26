@@ -236,7 +236,7 @@ func TestE2E(t *testing.T) {
 	waitFor("wheel scroll", func() bool { m := model(); return m.cur().top == 3 })
 	// media overlay "next" button
 	before := model().opos
-	pl.Events <- player.MediaKeyEvent{Action: "next"}
+	pl.Events() <- player.MediaKeyEvent{Action: "next"}
 	waitFor("media key next advances the queue", func() bool {
 		m := model()
 		return m.playing != nil && m.opos > before

@@ -35,3 +35,21 @@ func TestFitWidth(t *testing.T) {
 		}
 	}
 }
+
+func TestAccents(t *testing.T) {
+	seen := map[string]bool{}
+	for _, a := range accents {
+		if seen[a.name] || a.color.Dark == "" || a.color.Light == "" {
+			t.Fatalf("bad accent %+v", a)
+		}
+		seen[a.name] = true
+	}
+	applyAccent("purple")
+	if cGreen != accents[accentIndex("purple")].color {
+		t.Fatal("accent not applied")
+	}
+	applyAccent("nonsense") // unknown → default green
+	if cGreen != accents[0].color {
+		t.Fatal("unknown accent should fall back to green")
+	}
+}

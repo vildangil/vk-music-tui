@@ -107,7 +107,7 @@ type playerMsg struct{ ev any }
 
 type Model struct {
 	api *vk.Client
-	pl  *player.Player
+	pl  player.Engine
 	cfg *config.Config
 
 	w, h  int
@@ -162,7 +162,7 @@ type Model struct {
 	dragFrac float64 // 0..1 while dragging
 }
 
-func New(api *vk.Client, pl *player.Player, cfg *config.Config) Model {
+func New(api *vk.Client, pl player.Engine, cfg *config.Config) Model {
 	ti := textinput.New()
 	ti.Placeholder = "исполнитель или трек…"
 	ti.Prompt = "  "
@@ -183,8 +183,8 @@ func New(api *vk.Client, pl *player.Player, cfg *config.Config) Model {
 	config.MigrateDir(oldOff, config.OfflineDir())
 	config.MigrateDir(oldCache, config.CacheDir())
 	m.offline = scanOffline()
-	if pl != nil && pl.Path != "" {
-		m.dl = player.NewDownloader(pl.Path)
+	if enc := player.FindEncoder(pl); enc != "" {
+		m.dl = player.NewDownloader(enc)
 	}
 	m.lyrOn = cfg.Lyrics
 	applyAccent(cfg.Accent)
@@ -217,7 +217,7 @@ func tickEvery(d time.Duration) tea.Cmd {
 }
 
 func (m Model) waitPlayer() tea.Cmd {
-	ch := m.pl.Events
+	ch := m.pl.Events()
 	return func() tea.Msg { return playerMsg{<-ch} }
 }
 
@@ -788,7 +788,7 @@ func (m *Model) handlePlayer(ev any) tea.Cmd {
 			}
 		}
 	case player.DiedEvent:
-		m.setStatus("mpv неожиданно завершился. Перезапусти плеер.", true)
+		m.setStatus(m.pl.Name()+" неожиданно завершился. Перезапусти плеер.", true)
 		m.playing = nil
 	}
 	return nil

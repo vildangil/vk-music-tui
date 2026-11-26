@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// DownloadJob saves one track to an mp3 file using mpv's encoder (no ffmpeg needed).
+// DownloadJob saves one track to an mp3 file using mpv's encoder or ffmpeg.
 type DownloadJob struct {
 	Key           string // track id, for de-duplication and events
 	URL           string
@@ -36,7 +36,7 @@ type DownloadEvent struct {
 
 // Downloader runs jobs one at a time, user downloads before cache jobs.
 type Downloader struct {
-	MPV    string
+	MPV    string // mpv or ffmpeg
 	Events chan DownloadEvent
 
 	mu      sync.Mutex
@@ -166,17 +166,17 @@ func (d *Downloader) encode(url string, j DownloadJob) error {
 	part := j.Dest + ".part"
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, d.MPV,
-		"--no-config", "--no-terminal", "--ytdl=no", "--vid=no", "--sid=no",
-		"--network-timeout=30",
-		url,
-		"--o="+part, "--of=mp3", "--oac=libmp3lame", "--oacopts=b=320k",
-		"--ocopy-metadata=no",
-		"--oset-metadata-append=title="+j.Title,
-		"--oset-metadata-append=artist="+j.Artist,
-	)
-	if j.Album != "" {
-		cmd.Args = append(cmd.Args, "--oset-metadata-append=album="+j.Album)
+	var cmd *exec.Cmd
+	if isFFmpeg(d.MPV) {
+		args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", url,
+			"-vn", "-map_metadata", "-1", "-metadata", "title=" + j.Title, "-metadata", "artist=" + j.Artist}
+		if j.Album != "" {
+			args = append(args, "-metadata", "album="+j.Album)
+		}
+		args = append(args, "-c:a", "libmp3lame", "-b:a", "320k", "-f", "mp3", part)
+		cmd = exec.CommandContext(ctx, d.MPV, args...)
+	} else {
+		cmd = mpvEncodeCmd(ctx, d.MPV, url, part, j)
 	}
 	prepareCmd(cmd)
 	if err := cmd.Start(); err != nil {
@@ -190,9 +190,29 @@ func (d *Downloader) encode(url string, j DownloadJob) error {
 		if err == nil {
 			err = errors.New("пустой файл")
 		}
-		return fmt.Errorf("mpv не смог сохранить трек: %w", err)
+		return fmt.Errorf("%s не смог сохранить трек: %w", filepath.Base(d.MPV), err)
 	}
 	return os.Rename(part, j.Dest)
+}
+
+func isFFmpeg(p string) bool {
+	return strings.HasPrefix(strings.ToLower(filepath.Base(p)), "ffmpeg")
+}
+
+func mpvEncodeCmd(ctx context.Context, mpv, url, part string, j DownloadJob) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, mpv,
+		"--no-config", "--no-terminal", "--ytdl=no", "--vid=no", "--sid=no",
+		"--network-timeout=30",
+		url,
+		"--o="+part, "--of=mp3", "--oac=libmp3lame", "--oacopts=b=320k",
+		"--ocopy-metadata=no",
+		"--oset-metadata-append=title="+j.Title,
+		"--oset-metadata-append=artist="+j.Artist,
+	)
+	if j.Album != "" {
+		cmd.Args = append(cmd.Args, "--oset-metadata-append=album="+j.Album)
+	}
+	return cmd
 }
 
 // ---------- cache housekeeping ----------

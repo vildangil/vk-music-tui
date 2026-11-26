@@ -15,7 +15,11 @@ func ipcPath() string {
 	if dir == "" {
 		dir = os.TempDir()
 	}
-	return filepath.Join(dir, fmt.Sprintf("vktui-mpv-%d.sock", os.Getpid()))
+	p := filepath.Join(dir, fmt.Sprintf("vktui-mpv-%d.sock", os.Getpid()))
+	if len(p) > 100 { // unix socket paths are limited to 104 bytes on macOS
+		p = filepath.Join("/tmp", fmt.Sprintf("vktui-mpv-%d-%d.sock", os.Getuid(), os.Getpid()))
+	}
+	return p
 }
 
 func dialIPC(path string) (net.Conn, error) { return net.Dial("unix", path) }

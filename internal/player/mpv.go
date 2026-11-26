@@ -68,7 +68,7 @@ type Player struct {
 	wmu    sync.Mutex
 	mu     sync.Mutex
 	st     State
-	Events chan any
+	events chan any
 	once   sync.Once
 	done   chan struct{} // closed when mpv exits
 	quit   bool
@@ -125,7 +125,9 @@ func Find(hint string) (string, error) {
 			extra = append(extra, m...)
 		}
 	case "darwin":
-		extra = []string{"/opt/homebrew/bin/mpv", "/usr/local/bin/mpv", "/Applications/mpv.app/Contents/MacOS/mpv"}
+		home, _ := os.UserHomeDir()
+		extra = []string{"/opt/homebrew/bin/mpv", "/usr/local/bin/mpv", "/opt/local/bin/mpv", "/Applications/mpv.app/Contents/MacOS/mpv",
+			filepath.Join(home, "Applications", "mpv.app", "Contents", "MacOS", "mpv"), filepath.Join(home, ".local", "bin", "mpv")}
 	default:
 		extra = []string{"/usr/bin/mpv", "/usr/local/bin/mpv", "/var/lib/flatpak/exports/bin/io.mpv.Mpv"}
 	}
@@ -136,6 +138,10 @@ func Find(hint string) (string, error) {
 	}
 	return "", errors.New("mpv не найден")
 }
+
+func (p *Player) Name() string     { return "mpv" }
+func (p *Player) Binary() string   { return p.Path }
+func (p *Player) Events() chan any { return p.events }
 
 func Start(mpvPath string, volume int) (*Player, error) {
 	sock := ipcPath()
@@ -183,7 +189,7 @@ func start(mpvPath, sock string, args []string, volume int) (*Player, error) {
 		return nil, fmt.Errorf("не удалось запустить mpv: %w", err)
 	}
 	afterStart(cmd)
-	p := &Player{Path: mpvPath, cmd: cmd, sock: sock, Events: make(chan any, 32), st: State{Volume: float64(volume), Idle: true}, done: make(chan struct{})}
+	p := &Player{Path: mpvPath, cmd: cmd, sock: sock, events: make(chan any, 32), st: State{Volume: float64(volume), Idle: true}, done: make(chan struct{})}
 
 	var waitErr error
 	go func() { waitErr = cmd.Wait(); close(p.done) }()
@@ -224,7 +230,7 @@ func start(mpvPath, sock string, args []string, volume int) (*Player, error) {
 
 func (p *Player) emit(ev any) {
 	select {
-	case p.Events <- ev:
+	case p.events <- ev:
 	default:
 	}
 }

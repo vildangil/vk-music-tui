@@ -22,7 +22,9 @@ curl -fsSL https://raw.githubusercontent.com/vildangil/vk-music-tui/main/install
 ```sh
 vktui
 ```
-При первом запуске войди в VK по коду из SMS или уведомления.
+При первом запуске войди в VK: по коду из SMS / уведомления, по звонку (вводишь последние цифры номера, с которого позвонили — можно вставить номер целиком) или по паролю.
+
+На macOS плеер также есть в Launchpad и Программах — «VK Music TUI» откроет его в Терминале.
 
 ## Возможности
 
@@ -31,7 +33,18 @@ vktui
 - Эквалайзер, перемешивание, повтор, очередь
 - Скачивание в mp3 и вся музыка офлайн
 - Несколько аккаунтов
-- Мышь, медиа-клавиши и панель громкости Windows/macOS
+- 11 цветов темы (настройки, `7`)
+- Мышь, медиа-клавиши и панель громкости Windows/macOS, виджет «Сейчас играет» в Linux (MPRIS: GNOME, KDE, playerctl, waybar)
+- Несколько звуковых движков: mpv (по умолчанию), VLC, FFmpeg (ffplay), MPlayer
+
+## Звуковой движок
+
+```sh
+vktui engines        # что установлено и что выбрано
+vktui engine vlc     # выбрать: auto, mpv, vlc, ffplay, mplayer
+vktui deps           # поставить mpv (macOS: Homebrew / MacPorts / официальная сборка)
+```
+Выбрать движок можно и в настройках (`7`). mpv умеет всё; у VLC и MPlayer нет эквалайзера, у ffplay пауза, перемотка и громкость перезапускают поток. Для скачивания нужен mpv или ffmpeg.
 
 ## Клавиши
 
@@ -58,7 +71,9 @@ vktui
 vktui doctor
 ```
 Покажет, что не так. Частые причины:
-- **Не установлен mpv** — `winget install shinchiro.mpv` / `brew install mpv` / `sudo apt install mpv`.
+- **Не установлен mpv** — `vktui deps`, или `winget install shinchiro.mpv` / `brew install mpv` / `sudo apt install mpv`. Можно играть и через VLC / ffplay / MPlayer: `vktui engines`.
+- **«Не удалось отправить код»** — VK ограничил попытки: подожди пару минут или выбери другой способ (вход предложит сам).
+- **«Unknown method passed» / Flood control с токеном Kate** — VK больше не даёт музыку токенам Kate Mobile, войди по коду: `vktui login`.
 - **Включён VPN** — добавь в исключения `vk.com`, `vk.ru`, `userapi.com`, `vkuseraudio.net`, `okcdn.ru`.
 - **Ошибка входа** — `vktui login`.
 

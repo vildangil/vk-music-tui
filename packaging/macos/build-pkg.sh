@@ -2,7 +2,9 @@
 # Builds dist/vk-music-tui-<version>.pkg on macOS:
 #   /usr/local/bin/vktui                  universal (Intel + Apple Silicon) binary
 #   /Applications/VK Music TUI.app        opens Terminal with the player
-# The postinstall script installs mpv with Homebrew when it's missing.
+#   /usr/local/share/vk-music-tui/install-deps.sh
+# The postinstall script installs mpv when it's missing (Homebrew, MacPorts or
+# the official mpv.app build), see install-deps.sh.
 set -euo pipefail
 VERSION="${1:-0.0.0}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -15,21 +17,21 @@ LDFLAGS="-s -w -X main.version=$VERSION"
 ( cd "$ROOT" && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "$LDFLAGS" -o "$WORK/vktui-amd64" . )
 
 PAYLOAD="$WORK/payload"
-mkdir -p "$PAYLOAD/usr/local/bin" "$PAYLOAD/Applications"
+mkdir -p "$PAYLOAD/usr/local/bin" "$PAYLOAD/Applications" "$PAYLOAD/usr/local/share/vk-music-tui"
 lipo -create -output "$PAYLOAD/usr/local/bin/vktui" "$WORK/vktui-arm64" "$WORK/vktui-amd64"
 chmod 755 "$PAYLOAD/usr/local/bin/vktui"
+codesign --force --sign - "$PAYLOAD/usr/local/bin/vktui"
 
-# A tiny AppleScript app so the player can be started from Launchpad / Dock.
-cat > "$WORK/launcher.applescript" <<'EOF'
-tell application "Terminal"
-	activate
-	do script "clear; /usr/local/bin/vktui; exit"
-end tell
-EOF
-osacompile -o "$PAYLOAD/Applications/VK Music TUI.app" "$WORK/launcher.applescript"
-if [ -f "$ROOT/packaging/icons/vk-music-tui.icns" ]; then
-  cp "$ROOT/packaging/icons/vk-music-tui.icns" "$PAYLOAD/Applications/VK Music TUI.app/Contents/Resources/applet.icns"
-fi
+cp "$ROOT/packaging/macos/install-deps.sh" "$PAYLOAD/usr/local/share/vk-music-tui/install-deps.sh"
+chmod 755 "$PAYLOAD/usr/local/share/vk-music-tui/install-deps.sh"
+
+# "VK Music TUI.app" for Launchpad / Dock / Finder. A plain bundle whose
+# executable is a shell script that opens a .command file in Terminal:
+#  - no AppleScript, so no "allow to control Terminal" prompt;
+#  - the icon is a normal CFBundleIconFile (osacompile applets use Assets.car,
+#    which ignored our .icns, and swapping their icon broke the code signature,
+#    so the app didn't start from Launchpad).
+bash "$ROOT/packaging/macos/make-app.sh" "$PAYLOAD/Applications/VK Music TUI.app" "$VERSION"
 
 mkdir -p "$WORK/scripts"
 cp "$ROOT/packaging/macos/postinstall" "$WORK/scripts/postinstall"
@@ -43,7 +45,7 @@ pkgbuild \
   --install-location / \
   "$WORK/component.pkg"
 
-cat > "$WORK/distribution.xml" <<EOF
+cat > "$WORK/distribution.xml" <<XML
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
   <title>VK Music TUI $VERSION</title>
@@ -53,14 +55,17 @@ cat > "$WORK/distribution.xml" <<EOF
 • команда vktui (/usr/local/bin)
 • приложение «VK Music TUI» в Программах (открывает плеер в Терминале)
 
-Для звука нужен mpv: если он не установлен, установщик поставит его через Homebrew (если Homebrew есть). Иначе выполни: brew install mpv]]></welcome>
+Для звука нужен mpv. Если его нет, установщик поставит его сам: через Homebrew или MacPorts, а если их нет — скачает официальную сборку mpv.app с github.com/mpv-player/mpv (нужен интернет, ~50 МБ).
+
+Другие движки (VLC, FFmpeg, MPlayer) тоже поддерживаются: vktui engines.
+Если что-то не встало — в Терминале: vktui deps]]></welcome>
   <options customize="never" require-scripts="false" hostArchitectures="arm64,x86_64"/>
   <choices-outline><line choice="default"><line choice="app"/></line></choices-outline>
   <choice id="default"/>
   <choice id="app" visible="false"><pkg-ref id="io.github.vildangil.vk-music-tui"/></choice>
   <pkg-ref id="io.github.vildangil.vk-music-tui" version="$VERSION" onConclusion="none">component.pkg</pkg-ref>
 </installer-gui-script>
-EOF
+XML
 
 productbuild --distribution "$WORK/distribution.xml" --package-path "$WORK" "$ROOT/dist/vk-music-tui-$VERSION.pkg"
 echo "built dist/vk-music-tui-$VERSION.pkg"

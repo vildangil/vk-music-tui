@@ -108,7 +108,8 @@ const (
 	rowOffline   = rowCacheSize + 1
 	rowDlDir     = rowOffline + 1
 	rowVolStep   = rowDlDir + 1
-	rowAccent    = rowVolStep + 1
+	rowEngine    = rowVolStep + 1
+	rowAccent    = rowEngine + 1
 	rowAccount   = rowAccent + 1
 	rowAddAcc    = rowAccount + 1
 	settingsRows = rowAddAcc + 1
@@ -184,16 +185,14 @@ func (m *Model) changeSetting(row, d int) tea.Cmd {
 			}
 		}
 		c.VolStep = steps[(i+d+len(steps))%len(steps)]
+	case row == rowEngine:
+		m.cycleEngine(d)
 	case row == rowAccount:
 		return m.switchAccount(d)
 	case row == rowAddAcc:
 		return m.addAccount()
 	case row == rowAccent:
-		if c.Accent == "blue" {
-			c.Accent = "green"
-		} else {
-			c.Accent = "blue"
-		}
+		c.Accent = accents[(accentIndex(c.Accent)+d+len(accents))%len(accents)].name
 		applyAccent(c.Accent)
 	}
 	_ = c.Save()
@@ -268,11 +267,9 @@ func (m Model) viewSettings(w, h int) string {
 	row(rowOffline, "Вся «Моя музыка» офлайн", onOff(m.cfg.OfflineAll)+"  · хранится навсегда, без интернета")
 	row(rowDlDir, "Папка загрузок (Enter)", m.cfg.Downloads())
 	row(rowVolStep, "Шаг громкости", fmt.Sprintf("%d%%", m.cfg.Step()))
-	acc := "зелёный"
-	if m.cfg.Accent == "blue" {
-		acc = "синий VK"
-	}
-	row(rowAccent, "Цвет", acc)
+	row(rowEngine, "Звуковой движок", m.engineLabel())
+	a := accents[accentIndex(m.cfg.Accent)]
+	row(rowAccent, "Цвет темы", fmt.Sprintf("‹ %s ›  · %d из %d, меняется сразу", a.title, accentIndex(m.cfg.Accent)+1, len(accents)))
 	accs := ""
 	if n := len(m.cfg.Accounts); n > 1 {
 		accs = fmt.Sprintf("  · %d из %d, ←/→ переключить", m.cfg.ActiveIndex()+1, n)
@@ -293,17 +290,37 @@ const settingsRowsY = 3
 
 // ---------- accent colour ----------
 
-var (
-	greenAccent = lipgloss.AdaptiveColor{Light: "#148a3d", Dark: "#1DB954"}
-	blueAccent  = lipgloss.AdaptiveColor{Light: "#2a5885", Dark: "#71AAEB"}
-)
+// accent is a colour theme: progress bar, focused frame, playing track.
+type accent struct {
+	name, title string
+	color       lipgloss.AdaptiveColor
+}
+
+var accents = []accent{
+	{"green", "зелёный", lipgloss.AdaptiveColor{Light: "#148a3d", Dark: "#1DB954"}},
+	{"blue", "синий VK", lipgloss.AdaptiveColor{Light: "#2a5885", Dark: "#71AAEB"}},
+	{"cyan", "бирюзовый", lipgloss.AdaptiveColor{Light: "#007a87", Dark: "#2EC4D6"}},
+	{"purple", "фиолетовый", lipgloss.AdaptiveColor{Light: "#6b3fa0", Dark: "#B388FF"}},
+	{"pink", "розовый", lipgloss.AdaptiveColor{Light: "#b0306e", Dark: "#FF6FB5"}},
+	{"red", "красный", lipgloss.AdaptiveColor{Light: "#b3261e", Dark: "#FF5C5C"}},
+	{"orange", "оранжевый", lipgloss.AdaptiveColor{Light: "#b35c00", Dark: "#FF9F43"}},
+	{"yellow", "жёлтый", lipgloss.AdaptiveColor{Light: "#8a6d00", Dark: "#FFD43B"}},
+	{"mint", "мятный", lipgloss.AdaptiveColor{Light: "#1f7a5a", Dark: "#7CE0B5"}},
+	{"lavender", "лавандовый", lipgloss.AdaptiveColor{Light: "#5a5aa8", Dark: "#A9A9F5"}},
+	{"mono", "белый (моно)", lipgloss.AdaptiveColor{Light: "#111111", Dark: "#EAEAEA"}},
+}
+
+func accentIndex(name string) int {
+	for i, a := range accents {
+		if a.name == name {
+			return i
+		}
+	}
+	return 0
+}
 
 func applyAccent(name string) {
-	c := greenAccent
-	if name == "blue" {
-		c = blueAccent
-	}
-	cGreen = c
+	cGreen = accents[accentIndex(name)].color
 	sGreen = lipgloss.NewStyle().Foreground(cGreen)
 	sGreenB = lipgloss.NewStyle().Foreground(cGreen).Bold(true)
 }
@@ -342,4 +359,64 @@ func (m *Model) settingsTop(p *page, vis int) int {
 	}
 	p.top = max(0, min(p.top, max(0, settingsRows-vis)))
 	return p.top
+}
+
+// ---------- audio engine ----------
+
+// engineChoices are "auto" plus the installed engines.
+func engineChoices() []string {
+	av := player.Available()
+	out := []string{"auto"}
+	for _, e := range player.Engines {
+		if _, ok := av[e.Name]; ok {
+			out = append(out, e.Name)
+		}
+	}
+	return out
+}
+
+func (m *Model) engineLabel() string {
+	want := m.cfg.Engine
+	if want == "" {
+		want = "auto"
+	}
+	cur := ""
+	if m.pl != nil {
+		cur = m.pl.Name()
+	}
+	label := "авто"
+	if e, ok := player.EngineByName(want); ok {
+		label = e.Title
+	}
+	s := "‹ " + label + " ›"
+	if want == "auto" || want == cur {
+		if e, ok := player.EngineByName(cur); ok {
+			s += "  · сейчас " + e.Title + ": " + e.Note
+		}
+	} else {
+		s += "  · применится после перезапуска vktui"
+	}
+	return s
+}
+
+func (m *Model) cycleEngine(d int) {
+	ch := engineChoices()
+	want := m.cfg.Engine
+	if want == "" {
+		want = "auto"
+	}
+	i := 0
+	for k, n := range ch {
+		if n == want {
+			i = k
+		}
+	}
+	n := ch[(i+d+len(ch))%len(ch)]
+	if n == "auto" {
+		n = ""
+	}
+	m.cfg.Engine = n
+	if len(ch) == 1 {
+		m.setStatus("Других движков не найдено. Можно поставить VLC, FFmpeg (ffplay) или MPlayer", false)
+	}
 }

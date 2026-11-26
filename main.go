@@ -20,6 +20,7 @@ import (
 	"golang.org/x/term"
 
 	"vktui/internal/config"
+	"vktui/internal/nowplaying"
 	"vktui/internal/player"
 	"vktui/internal/ui"
 	"vktui/internal/vk"
@@ -35,10 +36,14 @@ const usage = `vktui — консольный плеер VK Музыки
   vktui accounts   список аккаунтов
   vktui switch N   переключиться на аккаунт N
   vktui logout     выйти из текущего аккаунта
-  vktui doctor     проверить mpv, сеть и токен
+  vktui doctor     проверить звуковой движок, сеть и токен
+  vktui engines    звуковые движки: какие найдены, какой выбран
+  vktui engine X   выбрать движок: auto, mpv, vlc, ffplay, mplayer
+  vktui deps       установить mpv (и ffmpeg) для звука
   vktui version    показать версию
 
 Переменные окружения:
+  VKTUI_ENGINE      движок на один запуск (mpv, vlc, ffplay, mplayer)
   VKTUI_MPV         путь к mpv, если он не в PATH
   VKTUI_CONFIG_DIR  папка конфига
   HTTPS_PROXY       прокси для запросов к VK API
@@ -77,6 +82,12 @@ func main() {
 		err = switchAccount(cfg, os.Args[2:])
 	case "doctor":
 		doctor(cfg)
+	case "engines":
+		listEngines(cfg)
+	case "engine":
+		err = setEngine(cfg, os.Args[2:])
+	case "deps":
+		err = installDeps()
 	case "version", "-v", "--version":
 		fmt.Println("vktui", version, runtime.GOOS+"/"+runtime.GOARCH)
 	case "help", "-h", "--help":
@@ -96,26 +107,46 @@ func mpvHelp() string {
 	case "windows":
 		return "  winget install shinchiro.mpv\n  (или: scoop install mpv, или положи mpv.exe рядом с vktui.exe)"
 	case "darwin":
-		return "  brew install mpv"
+		return "  vktui deps        (поставит mpv через Homebrew / MacPorts или скачает официальную сборку с github.com/mpv-player)\n  или: brew install mpv"
 	default:
 		return "  Debian/Ubuntu: sudo apt install mpv\n  Arch:          sudo pacman -S mpv\n  Fedora:        sudo dnf install mpv\n  Alpine:        sudo apk add mpv"
 	}
 }
 
+func enginePath(cfg *config.Config) string {
+	if cfg.Engine == "" || cfg.Engine == "auto" || cfg.Engine == "mpv" {
+		return cfg.MPV
+	}
+	return cfg.EnginePath
+}
+
+// chooseEngine finds the configured engine, falling back to any installed one.
+func chooseEngine(cfg *config.Config) (player.EngineInfo, string, error) {
+	info, path, err := player.Choose(cfg.Engine, enginePath(cfg))
+	if err != nil && cfg.Engine != "" && cfg.Engine != "auto" && os.Getenv("VKTUI_ENGINE") == "" {
+		if i2, p2, err2 := player.Choose("auto", cfg.MPV); err2 == nil {
+			fmt.Printf("⚠ %v — играю через %s\n", err, i2.Title)
+			return i2, p2, nil
+		}
+	}
+	return info, path, err
+}
+
 func run(cfg *config.Config) error {
-	mpvPath, err := player.Find(cfg.MPV)
+	info, enginePath, err := chooseEngine(cfg)
 	if err != nil {
-		return fmt.Errorf("для звука нужен mpv. Установи его:\n%s\nили укажи путь в переменной VKTUI_MPV", mpvHelp())
+		return fmt.Errorf("для звука нужен mpv (или VLC / FFmpeg / MPlayer). Установи его:\n%s\nили укажи путь в переменной VKTUI_MPV", mpvHelp())
 	}
 	if cfg.Token == "" {
 		if err := login(cfg); err != nil {
 			return err
 		}
 	}
-	pl, err := player.Start(mpvPath, cfg.Volume)
+	eng, err := player.Open(info, enginePath, cfg.Volume)
 	if err != nil {
 		return err
 	}
+	pl := nowplaying.Wrap(eng)
 	defer pl.Close()
 
 	for {
@@ -222,9 +253,10 @@ func login(cfg *config.Config) error {
 	fmt.Println("Вход в VK")
 	fmt.Println()
 	fmt.Println("  1) По коду из SMS / уведомления VK (рекомендуется)")
-	fmt.Println("  2) Логин и пароль")
-	fmt.Println("  3) Через браузер (Kate Mobile, старый способ — VK может не дать доступ к музыке)")
-	fmt.Println("  4) Вставить готовый токен")
+	fmt.Println("  2) По звонку: VK позвонит, введи последние цифры номера звонящего")
+	fmt.Println("  3) Логин и пароль")
+	fmt.Println("  4) Через браузер (Kate Mobile, старый способ — VK может не дать доступ к музыке)")
+	fmt.Println("  5) Вставить готовый токен")
 	fmt.Println()
 	var token string
 	var uid int64
@@ -232,13 +264,15 @@ func login(cfg *config.Config) error {
 	app := vk.Android
 	switch prompt("Выбор [1]: ") {
 	case "", "1":
-		token, uid, err = codeLogin(cfg, true)
+		token, uid, err = codeLogin(cfg, "auto")
 	case "2":
-		token, uid, err = codeLogin(cfg, false)
+		token, uid, err = codeLogin(cfg, "callreset")
 	case "3":
+		token, uid, err = codeLogin(cfg, "password")
+	case "4":
 		app = vk.Kate
 		token, uid = browserLogin()
-	case "4":
+	case "5":
 		if strings.HasPrefix(strings.ToLower(prompt("Токен от Kate Mobile? [y/N]: ")), "y") {
 			app = vk.Kate
 		}
@@ -279,10 +313,14 @@ func login(cfg *config.Config) error {
 	}
 	if err != nil {
 		fmt.Println("⚠ VK пока отвечает «Flood control», но токен сохранён. Подожди пару минут и запусти `vktui doctor`.")
+		fmt.Println("  " + tokenHint(app, err))
 		return nil
 	}
 	if tr, _, err := c.Audio(ctx, 0, 0, "", 0, 3); err != nil {
 		fmt.Println("⚠ Аудио недоступно с этим токеном:", err)
+		if h := tokenHint(app, err); h != "" {
+			fmt.Println("  " + h)
+		}
 	} else if len(tr) > 0 && !tr[0].Playable() {
 		fmt.Println("⚠ VK отдаёт заглушки вместо треков.")
 	} else {
@@ -295,7 +333,7 @@ func login(cfg *config.Config) error {
 var methodNames = map[string]string{
 	"sms":          "SMS",
 	"push":         "уведомление в приложении VK",
-	"callreset":    "звонок (код — последние цифры номера)",
+	"callreset":    "звонок (код — последние цифры номера звонящего)",
 	"email":        "код из письма на почту",
 	"codegen":      "код из приложения-генератора",
 	"reserve_code": "резервный код",
@@ -309,13 +347,15 @@ func methodName(m string) string {
 	return m
 }
 
-// codeLogin runs the official-app login. withCode=false skips straight to the password.
-func codeLogin(cfg *config.Config, withCode bool) (string, int64, error) {
+// codeLogin runs the official-app login. mode: "auto" (the way VK suggests),
+// "callreset" (VK calls, the code is the last digits of the caller's number)
+// or "password".
+func codeLogin(cfg *config.Config, mode string) (string, int64, error) {
 	l := vk.NewCodeLogin(cfg.DeviceID, prompt("Телефон или email: "))
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	if !withCode {
+	if mode == "password" {
 		return finishToken(ctx, l, promptSecret("Пароль (ввод скрыт): "), false)
 	}
 
@@ -327,35 +367,57 @@ func codeLogin(cfg *config.Config, withCode bool) (string, int64, error) {
 		fmt.Println("VK просит пароль для этого аккаунта.")
 		return finishToken(ctx, l, promptSecret("Пароль (ввод скрыт): "), false)
 	}
+	if mode == "callreset" {
+		method = "callreset"
+	}
 
+	failed := map[string]bool{}
+	send := true
 	for {
-		if err := l.Send(ctx, method); err != nil {
-			fmt.Println("Не удалось отправить код:", err)
+		if send {
+			if err := l.Send(ctx, method); err != nil {
+				failed[method] = true
+				fmt.Printf("✗ Не удалось отправить код (%s): %v\n", methodName(method), err)
+				fmt.Println("  Обычно это лимит попыток VK: подожди пару минут или выбери другой способ.")
+				m, ok := pickMethod(ctx, l, failed)
+				if !ok {
+					return "", 0, errors.New("вход отменён")
+				}
+				if m == "password" {
+					return finishToken(ctx, l, promptSecret("Пароль (ввод скрыт): "), false)
+				}
+				method = m
+				continue
+			}
+			send = false
+			where := methodName(method)
+			if l.Info != "" {
+				where += " (" + l.Info + ")"
+			}
+			fmt.Printf("✓ Код отправлен: %s\n", where)
+			if method == "callreset" {
+				fmt.Printf("  Сейчас позвонит незнакомый номер — брать трубку не нужно. Введи его последние %d цифр (можно вставить номер целиком).\n", l.Len)
+			}
 		}
-		where := methodName(method)
-		if l.Info != "" {
-			where += " (" + l.Info + ")"
-		}
-		fmt.Printf("Код отправлен: %s\n", where)
-		code := prompt("Введи код (или «другой» — выбрать другой способ): ")
-		if strings.EqualFold(code, "другой") || strings.EqualFold(code, "other") {
-			ms := l.Methods(ctx)
-			if len(ms) == 0 {
-				ms = []string{"sms", "push", "callreset", "email", "password"}
+		code := prompt("Введи код (" + `«ещё» — отправить снова, «другой» — другой способ): `)
+		switch strings.ToLower(code) {
+		case "":
+			continue
+		case "ещё", "еще", "again", "повтор":
+			send = true
+			continue
+		case "другой", "other":
+			m, ok := pickMethod(ctx, l, nil)
+			if !ok {
+				continue
 			}
-			for i, m := range ms {
-				fmt.Printf("  %d) %s\n", i+1, methodName(m))
-			}
-			var n int
-			fmt.Sscan(prompt("Номер: "), &n)
-			if n >= 1 && n <= len(ms) {
-				method = ms[n-1]
-			}
-			if method == "password" {
+			if m == "password" {
 				return finishToken(ctx, l, promptSecret("Пароль (ввод скрыт): "), false)
 			}
+			method, send = m, true
 			continue
 		}
+		code = normalizeCode(code, l.Len, method == "callreset")
 		skip, err := l.Check(ctx, method, code)
 		if err != nil {
 			fmt.Println("Код не подошёл:", err)
@@ -367,6 +429,53 @@ func codeLogin(cfg *config.Config, withCode bool) (string, int64, error) {
 		}
 		return finishToken(ctx, l, pass, true)
 	}
+}
+
+// normalizeCode keeps the digits; for a call it takes the last n digits, so
+// the whole caller number ("+7 (999) 123-45-67") can be pasted.
+func normalizeCode(code string, n int, call bool) string {
+	var d strings.Builder
+	for _, r := range code {
+		if r >= '0' && r <= '9' {
+			d.WriteRune(r)
+		}
+	}
+	s := d.String()
+	if s == "" {
+		return strings.TrimSpace(code)
+	}
+	if call && n > 0 && len(s) > n {
+		s = s[len(s)-n:]
+	}
+	return s
+}
+
+// pickMethod asks which verification method to use instead (skipping failed ones).
+func pickMethod(ctx context.Context, l *vk.CodeLogin, failed map[string]bool) (string, bool) {
+	ms := l.Methods(ctx)
+	if len(ms) == 0 {
+		ms = []string{"sms", "push", "callreset", "email", "password"}
+	}
+	hasPass := false
+	var list []string
+	for _, m := range ms {
+		hasPass = hasPass || m == "password"
+		if !failed[m] {
+			list = append(list, m)
+		}
+	}
+	if !hasPass {
+		list = append(list, "password")
+	}
+	for i, m := range list {
+		fmt.Printf("  %d) %s\n", i+1, methodName(m))
+	}
+	var n int
+	fmt.Sscan(prompt("Номер (Enter — отмена): "), &n)
+	if n < 1 || n > len(list) {
+		return "", false
+	}
+	return list[n-1], true
 }
 
 func finishToken(ctx context.Context, l *vk.CodeLogin, password string, usedCode bool) (string, int64, error) {
@@ -385,12 +494,23 @@ func finishToken(ctx context.Context, l *vk.CodeLogin, password string, usedCode
 				l.Extra.Set("validation_sid", r.ValidationSID)
 			}
 			where := "из SMS или уведомления VK"
-			if r.ValidationType == "2fa_app" {
+			call := strings.Contains(r.ValidationType, "callreset")
+			switch {
+			case r.ValidationType == "2fa_app":
 				where = "из приложения-аутентификатора / уведомления VK"
-			} else if r.PhoneMask != "" {
+			case call:
+				where = "последние цифры номера, с которого позвонили"
+			case r.PhoneMask != "":
 				where = "из SMS на " + r.PhoneMask
 			}
-			l.Extra.Set("code", prompt("Код двухфакторной защиты ("+where+"): "))
+			c := prompt("Код двухфакторной защиты (" + where + "; «sms» — прислать SMS): ")
+			if strings.EqualFold(c, "sms") || strings.EqualFold(c, "смс") {
+				l.Extra.Del("code")
+				l.Extra.Set("force_sms", "1")
+				continue
+			}
+			l.Extra.Del("force_sms")
+			l.Extra.Set("code", normalizeCode(c, 0, false))
 		case "need_captcha":
 			fmt.Println("VK просит капчу. Открой картинку и введи текст:")
 			fmt.Println("  " + r.CaptchaImg)
@@ -449,9 +569,19 @@ func doctor(cfg *config.Config) {
 			fmt.Println("       ", strings.TrimSpace(l[0]))
 		}
 	}
+	if info, ep, eerr := chooseEngine(cfg); eerr == nil {
+		fmt.Println("[ OK ] движок:", info.Title, "—", ep)
+	} else {
+		fmt.Println("[FAIL] движок:", eerr)
+	}
+	if enc := player.FindEncoder(nil); enc != "" {
+		fmt.Println("[ OK ] скачивание треков через:", enc)
+	} else {
+		fmt.Println("[FAIL] скачивание: нужен mpv или ffmpeg")
+	}
 
 	hc := &http.Client{Timeout: 10 * time.Second}
-	for _, h := range []string{"https://api.vk.com", "https://oauth.vk.com"} {
+	for _, h := range []string{"https://api.vk.com", "https://api.vk.ru", "https://oauth.vk.com"} {
 		resp, err := hc.Get(h)
 		if err == nil {
 			resp.Body.Close()
@@ -481,6 +611,9 @@ func doctor(cfg *config.Config) {
 	tr, n, err := c.Audio(ctx, 0, 0, "", 0, 1)
 	good := err == nil && (len(tr) == 0 || tr[0].Playable())
 	fmt.Println(ok(good), "аудио:", n, "треков", errStr(err))
+	if hint := tokenHint(c.App, err); hint != "" {
+		fmt.Println("      ", hint)
+	}
 	if len(tr) == 0 || !tr[0].Playable() {
 		return
 	}
@@ -543,6 +676,25 @@ func errStr(err error) string {
 		return ""
 	}
 	return "— " + err.Error()
+}
+
+// tokenHint explains VK errors that mean "this token can't do music".
+func tokenHint(app vk.App, err error) string {
+	var e *vk.APIError
+	if !errors.As(err, &e) {
+		return ""
+	}
+	switch {
+	case e.Code == 3 && app.Name == vk.Kate.Name:
+		return "VK больше не даёт музыку токенам Kate Mobile. Войди заново: vktui login → способ 1 (код) или 3 (пароль)."
+	case e.Code == 3:
+		return "у этого токена нет доступа к музыке. Войди заново: vktui login → способ 1."
+	case e.Code == 9 || e.Code == 6:
+		return "VK ограничил запросы с этим токеном (Flood control). Подожди 10–30 минут; если не проходит — войди заново по коду (vktui login → 1), токены с сайтов-генераторов часто заблокированы."
+	case e.Code == 5:
+		return "токен устарел или отозван — vktui login."
+	}
+	return ""
 }
 
 func isFlood(err error) bool {

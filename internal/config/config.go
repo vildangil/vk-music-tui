@@ -9,21 +9,23 @@ import (
 )
 
 type Config struct {
-	Token    string `json:"token"`
-	App      string `json:"app,omitempty"` // "android" (default) or "kate"
-	DeviceID string `json:"device_id,omitempty"`
-	UserID   int64  `json:"user_id"`
-	Volume   int    `json:"volume"`
-	Shuffle  bool   `json:"shuffle"`
-	Repeat   int    `json:"repeat"`
-	MPV      string `json:"mpv_path,omitempty"`
+	Token      string `json:"token"`
+	App        string `json:"app,omitempty"` // "android" (default) or "kate"
+	DeviceID   string `json:"device_id,omitempty"`
+	UserID     int64  `json:"user_id"`
+	Volume     int    `json:"volume"`
+	Shuffle    bool   `json:"shuffle"`
+	Repeat     int    `json:"repeat"`
+	MPV        string `json:"mpv_path,omitempty"`
+	Engine     string `json:"engine,omitempty"`      // "" / "auto", "mpv", "vlc", "ffplay", "mplayer"
+	EnginePath string `json:"engine_path,omitempty"` // program path for a non-mpv engine
 
 	// Settings screen
 	EQPreset  string      `json:"eq_preset,omitempty"`  // name from ui presets; "" = off
 	EQBands   [10]float64 `json:"eq_bands"`             // custom preset gains, dB
 	Normalize bool        `json:"normalize"`            // level out loud/quiet tracks
 	Autoplay  *bool       `json:"autoplay,omitempty"`   // continue with VK Mix when the queue ends (default on)
-	Accent    string      `json:"accent,omitempty"`     // "green" (default) or "blue"
+	Accent    string      `json:"accent,omitempty"`     // green (default), blue, cyan, purple, pink, red, orange, yellow, mint, lavender, mono
 	VolStep   int         `json:"vol_step,omitempty"`   // volume step for +/-, default 5
 	Lyrics    bool        `json:"lyrics"`               // lyrics panel open
 	NerdIcons *bool       `json:"nerd_icons,omitempty"` // Nerd Font icons (need a Nerd Font in the terminal)

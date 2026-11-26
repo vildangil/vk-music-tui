@@ -1,16 +1,14 @@
 #!/bin/bash
 # Runs as root after the .pkg is installed: make sure mpv (the audio engine) exists.
-for p in /opt/homebrew/bin/mpv /usr/local/bin/mpv /Applications/mpv.app/Contents/MacOS/mpv; do
-  [ -x "$p" ] && exit 0
-done
+# Never fails the installation: without mpv the player explains what to do.
+DEPS="/usr/local/share/vk-music-tui/install-deps.sh"
+APP="/Applications/VK Music TUI.app"
 
-USER_NAME="$(stat -f%Su /dev/console)"
-for brew in /opt/homebrew/bin/brew /usr/local/bin/brew; do
-  if [ -x "$brew" ] && [ -n "$USER_NAME" ] && [ "$USER_NAME" != "root" ]; then
-    # Homebrew refuses to run as root: install as the logged-in user
-    sudo -u "$USER_NAME" -H "$brew" install mpv >/tmp/vk-music-tui-mpv.log 2>&1 || true
-    exit 0
-  fi
-done
-# no Homebrew: the player explains how to install mpv on first start
+if [ -x "$DEPS" ]; then
+  VKTUI_DEPS_LOG=/tmp/vk-music-tui-deps.log /bin/bash "$DEPS" || true
+fi
+
+# refresh Launchpad / Finder so the new icon shows up right away
+touch "$APP" 2>/dev/null
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP" >/dev/null 2>&1 || true
 exit 0

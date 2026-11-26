@@ -53,7 +53,7 @@ func TestMediaKeys(t *testing.T) {
 	deadline := time.After(40 * time.Second)
 	for {
 		select {
-		case ev := <-p.Events:
+		case ev := <-p.Events():
 			t.Logf("event: %#v", ev)
 			if mk, ok := ev.(MediaKeyEvent); ok && mk.Action == "next" {
 				return

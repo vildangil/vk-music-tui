@@ -114,6 +114,7 @@ func (m *Model) job(t vk.Track, dest string, cache bool) player.DownloadJob {
 // downloadTrack saves a track to the downloads folder.
 func (m *Model) downloadTrack(t vk.Track) {
 	if m.dl == nil {
+		m.setStatus("Для скачивания нужен mpv или ffmpeg", true)
 		return
 	}
 	if m.isDownloaded(t) && exists(m.local[t.Key()]) {
