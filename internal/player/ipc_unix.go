@@ -27,7 +27,8 @@ func dialIPC(path string) (net.Conn, error) { return net.Dial("unix", path) }
 func cleanupIPC(path string) { _ = os.Remove(path) }
 
 // mpv stays in our process group, so closing the terminal (SIGHUP) stops it too.
-// On Linux we additionally ask the kernel to kill it if we die.
+// If we are killed hard it must die too: Linux asks the kernel (Pdeathsig),
+// macOS/BSD use a watchdog (see watchParent).
 func prepareCmd(cmd *exec.Cmd) { setDeathSig(cmd) }
 
-func afterStart(*exec.Cmd) {}
+func afterStart(cmd *exec.Cmd) { watchParent(cmd) }

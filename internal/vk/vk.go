@@ -63,8 +63,9 @@ type Client struct {
 	App      App
 	DeviceID string
 	HTTP     *http.Client
-	UA       string // overrides App.UA when set (diagnostics)
-	Version  string // overrides APIVersion when set
+	UA       string     // overrides App.UA when set (diagnostics)
+	Version  string     // overrides APIVersion when set
+	Extra    url.Values // added to every call (captcha answer)
 }
 
 func New(app App, token, deviceID string) *Client {
@@ -83,7 +84,16 @@ func NewDeviceID() string {
 type APIError struct {
 	Code int    `json:"error_code"`
 	Msg  string `json:"error_msg"`
+
+	// error 14 (captcha needed): a picture to type, and/or VK's "I'm not a
+	// robot" page. The person solves it; it is never solved automatically.
+	CaptchaSID  string `json:"captcha_sid"`
+	CaptchaImg  string `json:"captcha_img"`
+	RedirectURI string `json:"redirect_uri"`
 }
+
+// IsCaptcha reports whether VK wants a captcha before going on.
+func (e *APIError) IsCaptcha() bool { return e.Code == 14 }
 
 func (e *APIError) Error() string { return fmt.Sprintf("VK API %d: %s", e.Code, e.Msg) }
 
@@ -156,6 +166,9 @@ func (c *Client) Call(ctx context.Context, method string, params url.Values, out
 	}
 	params.Set("lang", "ru")
 	params.Set("https", "1")
+	for k, v := range c.Extra {
+		params[k] = v
+	}
 	// The Android-style device id belongs to the official-app flow; Kate tokens
 	// were issued without it and VK may treat the mismatch as suspicious.
 	if c.DeviceID != "" && c.App.Name != Kate.Name {

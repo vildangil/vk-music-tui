@@ -359,7 +359,8 @@ func codeLogin(cfg *config.Config, mode string) (string, int64, error) {
 		return finishToken(ctx, l, promptSecret("Пароль (ввод скрыт): "), false)
 	}
 
-	method, err := l.Start(ctx)
+	var method string
+	err := withCaptcha(l, func() (e error) { method, e = l.Start(ctx); return })
 	if err != nil {
 		return "", 0, fmt.Errorf("VK не принял логин: %w", err)
 	}
@@ -375,7 +376,7 @@ func codeLogin(cfg *config.Config, mode string) (string, int64, error) {
 	send := true
 	for {
 		if send {
-			if err := l.Send(ctx, method); err != nil {
+			if err := withCaptcha(l, func() error { return l.Send(ctx, method) }); err != nil {
 				failed[method] = true
 				fmt.Printf("✗ Не удалось отправить код (%s): %v\n", methodName(method), err)
 				fmt.Println("  Обычно это лимит попыток VK: подожди пару минут или выбери другой способ.")
@@ -418,7 +419,8 @@ func codeLogin(cfg *config.Config, mode string) (string, int64, error) {
 			continue
 		}
 		code = normalizeCode(code, l.Len, method == "callreset")
-		skip, err := l.Check(ctx, method, code)
+		var skip bool
+		err := withCaptcha(l, func() (e error) { skip, e = l.Check(ctx, method, code); return })
 		if err != nil {
 			fmt.Println("Код не подошёл:", err)
 			continue
@@ -429,6 +431,49 @@ func codeLogin(cfg *config.Config, mode string) (string, int64, error) {
 		}
 		return finishToken(ctx, l, pass, true)
 	}
+}
+
+// withCaptcha runs a login step; when VK answers "Captcha needed" (API 14)
+// the person solves it — a picture to type, or VK's "I'm not a robot" page in
+// the browser — and the step is repeated.
+func withCaptcha(l *vk.CodeLogin, step func() error) error {
+	for attempt := 0; ; attempt++ {
+		err := step()
+		var e *vk.APIError
+		if !errors.As(err, &e) || !e.IsCaptcha() || attempt >= 4 {
+			if errors.As(err, &e) && e.IsCaptcha() {
+				return fmt.Errorf("%w\nVK всё ещё просит капчу. Подожди 10–15 минут (VK так ограничивает частые входы) или войди другим способом: vktui login → 4 или 5", err)
+			}
+			return err
+		}
+		key, ok := askCaptcha(e)
+		if !ok {
+			return err
+		}
+		l.SetCaptcha(e.CaptchaSID, key)
+	}
+}
+
+// askCaptcha shows the captcha to the person. ok=false: they gave up.
+func askCaptcha(e *vk.APIError) (key string, ok bool) {
+	fmt.Println()
+	fmt.Println("VK просит подтвердить, что ты не робот (капча).")
+	if e.CaptchaImg != "" {
+		fmt.Println("Открываю картинку в браузере. Если не открылась — скопируй ссылку:")
+		fmt.Println("  " + e.CaptchaImg)
+		openBrowser(e.CaptchaImg)
+		key = prompt("Текст с картинки (Enter — отмена): ")
+		return key, key != ""
+	}
+	if e.RedirectURI != "" {
+		fmt.Println("Открываю проверку VK в браузере. Если не открылась — скопируй ссылку:")
+		fmt.Println("  " + e.RedirectURI)
+		openBrowser(e.RedirectURI)
+		a := prompt("Пройди проверку в браузере и нажми Enter («отмена» — выйти): ")
+		return "", !strings.EqualFold(a, "отмена") && !strings.EqualFold(a, "cancel")
+	}
+	fmt.Println("VK не прислал ни картинку, ни ссылку на проверку.")
+	return "", false
 }
 
 // normalizeCode keeps the digits; for a call it takes the last n digits, so

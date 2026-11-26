@@ -72,6 +72,7 @@ vktui doctor
 ```
 Покажет, что не так. Частые причины:
 - **Не установлен mpv** — `vktui deps`, или `winget install shinchiro.mpv` / `brew install mpv` / `sudo apt install mpv`. Можно играть и через VLC / ffplay / MPlayer: `vktui engines`.
+- **«Captcha needed»** — VK просит капчу: картинка или проверка «я не робот» откроется в браузере, реши её сам и вернись в терминал. Если капча повторяется — подожди 10–15 минут.
 - **«Не удалось отправить код»** — VK ограничил попытки: подожди пару минут или выбери другой способ (вход предложит сам).
 - **«Unknown method passed» / Flood control с токеном Kate** — VK больше не даёт музыку токенам Kate Mobile, войди по коду: `vktui login`.
 - **Включён VPN** — добавь в исключения `vk.com`, `vk.ru`, `userapi.com`, `vkuseraudio.net`, `okcdn.ru`.

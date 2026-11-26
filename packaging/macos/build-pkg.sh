@@ -55,7 +55,10 @@ cat > "$WORK/distribution.xml" <<XML
 • команда vktui (/usr/local/bin)
 • приложение «VK Music TUI» в Программах (открывает плеер в Терминале)
 
-Для звука нужен mpv. Если его нет, установщик поставит его сам: через Homebrew или MacPorts, а если их нет — скачает официальную сборку mpv.app с github.com/mpv-player/mpv (нужен интернет, ~50 МБ).
+Для звука нужен mpv. Если его нет, установщик поставит его сам (нужен интернет, ~25–50 МБ):
+• Apple Silicon — через Homebrew, иначе готовая сборка mpv.app (MacPorts — в последнюю очередь);
+• Intel — сразу готовая сборка mpv.app (с github.com/mpv-player или со страницы сборок, на которую ссылается mpv.io): Homebrew на Intel собирает mpv из исходников, это очень долго.
+Ход установки mpv пишется в /tmp/vk-music-tui-deps.log
 
 Другие движки (VLC, FFmpeg, MPlayer) тоже поддерживаются: vktui engines.
 Если что-то не встало — в Терминале: vktui deps]]></welcome>

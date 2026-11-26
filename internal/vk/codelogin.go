@@ -30,6 +30,20 @@ type CodeLogin struct {
 
 	// Extra is merged into the oauth/token request (2FA code, captcha answer).
 	Extra url.Values
+
+	captcha url.Values // answer for the next API call only
+}
+
+// SetCaptcha sends the person's captcha answer with the next call.
+// key may be empty when the captcha was passed on VK's page instead.
+func (l *CodeLogin) SetCaptcha(sid, key string) {
+	l.captcha = url.Values{}
+	if sid != "" {
+		l.captcha.Set("captcha_sid", sid)
+	}
+	if key != "" {
+		l.captcha.Set("captcha_key", key)
+	}
 }
 
 func NewCodeLogin(deviceID, login string) *CodeLogin {
@@ -40,6 +54,11 @@ func (l *CodeLogin) client() *Client {
 	c := New(l.App, l.anon, l.DeviceID)
 	c.HTTP = l.hc
 	c.Version = authVersion
+	if len(l.captcha) > 0 && l.captcha.Get("captcha_key") != "" {
+		c.Extra, l.captcha = l.captcha, nil
+	} else {
+		l.captcha = nil
+	}
 	return c
 }
 
